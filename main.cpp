@@ -114,8 +114,8 @@ struct Menu {  // TODO
 
         return GuiButton(play_bttn_rect, "PLAY") ? Game_State::Game_Started : Game_State::Menu;
     }
-    inline auto win(auto&& timer) {}
-    inline auto lose() {}
+    inline auto win(auto&& timer) {}  //! TODO
+    inline auto lose() {}             //! TODO
 
    private:
     struct VALUE {
@@ -216,6 +216,10 @@ class MinesweeperGrid {
             }
 #endif
         }
+    }
+
+    inline auto get_time() const {
+        return grid_time.get_duration();
     }
 
     ~MinesweeperGrid() noexcept = default;
