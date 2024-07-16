@@ -37,15 +37,32 @@ enum class Mouse_Action : uint8_t {
     Toggle_Flag,
 };
 
-enum class Grid_Status {
+enum class Grid_Status : uint8_t {
     Good,
     Bad,
     Finished
 };
 
+enum class Texture_ID : uint8_t {
+    Flag,
+    Mine
+};
+
+static auto get_texture(Texture_ID texture_id) {
+    static Texture2D target;
+
+    switch (texture_id) {
+        case Texture_ID::Flag:
+            target = LoadTexture("textures/flag.png");
+            break;
+        case Texture_ID::Mine:
+            target = LoadTexture("textures/mine.png");
+            break;
+    }
+    return target;
+}
+
 struct Mouse_Wrapper {
-    Mouse_Action action;
-    Vector2 pos;
     inline void update() {
         pos = GetMousePosition();
         action = []() -> Mouse_Action {
@@ -56,6 +73,9 @@ struct Mouse_Wrapper {
             return Mouse_Action::None;
         }();
     }
+
+    Mouse_Action action;
+    Vector2 pos;
 };
 
 struct Cell {  // TODO: REFACTOR
@@ -67,19 +87,20 @@ struct Cell {  // TODO: REFACTOR
         if (!revealed)
             flagged != flagged;
     }
+
     inline auto reveal() {
         if (type == Cell_Type::Mine)
             return false;
         return (revealed = true);
     }
+
     Cell_Type type = Cell_Type::Normal;
     uint8_t mines_around = 0;
     bool flagged = false, revealed = false;
+    RenderTexture2D texture;
 };
 
 struct Menu {  // TODO
-    uint8_t selected_sz, selected_mines;
-
     inline auto show() {
         constexpr static auto label = "Minesweeper";
         constexpr static auto font_sz = 52;  // PISYAT DWA!
@@ -114,8 +135,12 @@ struct Menu {  // TODO
 
         return GuiButton(play_bttn_rect, "PLAY") ? Game_State::Game_Started : Game_State::Menu;
     }
+
     inline auto win(auto&& timer) {}  //! TODO
-    inline auto lose() {}             //! TODO
+
+    inline auto lose() {}  //! TODO
+
+    uint8_t selected_sz, selected_mines;
 
    private:
     struct VALUE {
@@ -184,17 +209,18 @@ class MinesweeperGrid {
     }
 
     auto update_status() {
-        auto status = Grid_Status::Good;
-        auto check_1 = std::async(std::launch::async, std::ranges::all_of, mines, [&](auto&& m_idx) -> bool { return cells[m_idx].type == Cell_Type::Flagged; });
-        auto check_2 = std::async(std::launch::async, std::ranges::any_of, mines, [&](auto&& m_idx) -> bool { return cells[m_idx].type == Cell_Type::Normal_Revealed; });
-
-        if (status == Grid_Status::Finished) {
-            grid_time.stop();
+        if (std::ranges::any_of(cells, [](auto&& cell) { return cell.is_mine() && cell.is_revealed(); })) {  // if any mine is revealed
+            return Grid_Status::Bad;
         }
-        return status;  //! TODO
+        if (std::ranges::all_of(cells, [](auto&& cell) { return !cell.is_mine() && cell.is_revealed(); })) {  // if all NOT mines are revealed
+            grid_time.stop();
+            return Grid_Status::Finished;
+        }
+        return Grid_Status::Good;
     }
 
-    void draw(Idx_Type cell_idx) {  // TODO: REFACTOR
+    void
+    draw(Idx_Type cell_idx) {  // TODO: REFACTOR
         for (auto&& [idx, cell] : cells | std::views::enumerate) {
             const auto [x, y] = pos_from_idx(idx);
             const auto rect = Rectangle(x * cell_size, y * cell_size, cell_size, cell_size);
@@ -244,6 +270,10 @@ int main() {
     InitWindow(WINDOW_SIZE, WINDOW_SIZE, "Raylib Minesweeper");
     // SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
 
+    static const auto texture_flag = get_texture(Texture_ID::Flag);
+    static const auto texture_mine = get_texture(Texture_ID::Mine);
+    
+
     static Game_State game_state;  // = Game_State::Game_Started;
     static Menu menu;
     static Mouse_Wrapper mouse;
@@ -255,6 +285,9 @@ int main() {
         BeginDrawing();
         {
             ClearBackground(DARKGRAY);
+
+            DrawTexture(texture_flag, 10, 10, WHITE);
+            DrawTexture(texture_mine, 10, 10 + 28 + 10, WHITE);
 
             switch (game_state) {  // TODO: REFACTOR
                 case Game_State::Menu: {
@@ -296,7 +329,7 @@ int main() {
                 }
             }
         }
-        DrawFPS(10, 10);
+        // DrawFPS(10, 10);
         EndDrawing();
     }
     CloseWindow();
