@@ -17,6 +17,12 @@
 #include "random.hpp"
 #include "timer.hpp"
 
+// todo list :
+// draw texture on mines and flags
+// menu win and lose windows
+// implement update grid::input
+// make different colors depending on how many mines are around
+
 constexpr static auto WINDOW_SIZE = 800;
 
 enum class Game_State : uint8_t {
@@ -254,6 +260,7 @@ class MinesweeperGrid {
     inline std::array<Idx_Type, 2> pos_from_idx(Idx_Type idx) const noexcept {
         return std::to_array({idx % sq_size, idx / sq_size});
     }
+
     inline Idx_Type idx_from_mouse_pos(Vector2 pos) const noexcept {
         return static_cast<Idx_Type>(pos.y / cell_size) * sq_size + static_cast<Idx_Type>(pos.x / cell_size);
     }
@@ -272,7 +279,6 @@ int main() {
 
     static const auto texture_flag = get_texture(Texture_ID::Flag);
     static const auto texture_mine = get_texture(Texture_ID::Mine);
-    
 
     static Game_State game_state;  // = Game_State::Game_Started;
     static Menu menu;
@@ -310,18 +316,21 @@ int main() {
                             game_state = Game_State::Game_Won;
                             break;
                         case Grid_Status::Good:
-                        default:
+                            grid->draw(current_cell);
                             break;
+                        default:
+                            std::unreachable();
                     }
-                    grid->draw(current_cell);
                     break;
                 }
                 case Game_State::Game_Won: {
                     menu.win(grid->get_time());
+                    grid.reset();
                     break;
                 }
                 case Game_State::Game_Lost: {
                     menu.lose();
+                    grid.reset();
                     break;
                 }
                 default: {
