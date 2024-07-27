@@ -5,10 +5,11 @@
 #include <raygui.h>
 
 #include <algorithm>
+#include <cassert>
 #include <format>
-#include <future>
 #include <numeric>
 #include <print>
+#include <queue>
 #include <ranges>
 #include <set>
 #include <string>
@@ -20,8 +21,6 @@
 // todo list :
 // draw texture on mines and flags
 // menu win and lose windows
-// implement update grid::input
-// make different colors depending on how many mines are around
 
 constexpr static auto WINDOW_SIZE = 800;
 
@@ -54,22 +53,45 @@ enum class Texture_ID : uint8_t {
     Mine
 };
 
-static auto get_texture(Texture_ID texture_id) {
-    static Texture2D target;
+static inline auto get_texture(Texture_ID texture_id) {
+    static const auto flag = LoadTexture("textures/flag.png");
+    static const auto mine = LoadTexture("textures/mine.png");
 
     switch (texture_id) {
         case Texture_ID::Flag:
-            target = LoadTexture("textures/flag.png");
-            break;
+            return flag;
         case Texture_ID::Mine:
-            target = LoadTexture("textures/mine.png");
-            break;
+            return mine;
+        default:
+            std::unreachable();
     }
-    return target;
+}
+
+static auto draw_texture(Texture_ID texture_id, Rectangle params) {
+    constexpr static auto src_rect = Rectangle{0, 0, 28, 28};  // src texture size
+    const auto& [x, y, sz, _] = params;
+    const auto new_sz = sz * 0.5f;
+
+    const auto offset = (sz - new_sz) / 2;
+    const auto dst_rect = Rectangle{x + offset, y + offset, new_sz, new_sz};
+
+    DrawTexturePro(get_texture(texture_id), src_rect, dst_rect, Vector2{}, 0.f, WHITE);
+}
+
+static auto draw_mines_around(uint32_t mines, Rectangle params) {
+    constexpr static auto colors = std::to_array<Color>({BLANK, GREEN, BLUE, RED, PURPLE, MAGENTA});
+    const auto& [x, y, sz, _] = params;
+    const auto txt_sz = sz * 0.8f;
+    const auto half_sz = sz / 2, half_txt = txt_sz / 2;
+
+    const auto as_str = std::to_string(mines);
+    const auto text_width = MeasureText(as_str.c_str(), txt_sz);
+
+    DrawText(as_str.c_str(), x + half_sz - text_width / 2, y + half_sz - half_txt, txt_sz, colors[mines]);
 }
 
 struct Mouse_Wrapper {
-    inline void update() {
+    inline auto update() {
         pos = GetMousePosition();
         action = []() -> Mouse_Action {
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
@@ -85,56 +107,75 @@ struct Mouse_Wrapper {
 };
 
 struct Cell {  // TODO: REFACTOR
-    inline bool is_mine() const { return type == Cell_Type::Mine; }
-    inline bool is_revealed() const { return revealed; }
-    inline bool is_flagged() const { return flagged; }
+    inline auto is_mine() const { return type == Cell_Type::Mine; }
+    inline auto is_revealed() const { return revealed; }
+    inline auto is_flagged() const { return flagged; }
 
+    inline auto reveal() { revealed = true; }
     inline auto toggle_flag() {
         if (!revealed)
-            flagged != flagged;
+            flagged = !flagged;
     }
 
-    inline auto reveal() {
-        if (type == Cell_Type::Mine)
-            return false;
-        return (revealed = true);
-    }
-
-    Cell_Type type = Cell_Type::Normal;
-    uint8_t mines_around = 0;
     bool flagged = false, revealed = false;
-    RenderTexture2D texture;
+    uint8_t mines_around = 0;
+    Cell_Type type = Cell_Type::Normal;
+    Texture2D texture;
 };
 
-struct Menu {  // TODO
-    inline auto show() {
-        constexpr static auto label = "Minesweeper";
-        constexpr static auto font_sz = 52;  // PISYAT DWA!
-        static const auto label_sz = MeasureTextEx(GetFontDefault(), label, font_sz, 1.f);
-        DrawText(label, (WINDOW_SIZE - label_sz.x) / 2, WINDOW_SIZE * 0.15, font_sz, RAYWHITE);
-
-        static VALUE values[] = {
-            {"Grid Size", 5, 30},
-            {"Mines Ratio", 0.1f, 0.9f},
-        };
-
-        constexpr static auto half_screen = WINDOW_SIZE / 2.f,
-                              rect_w = WINDOW_SIZE * 0.5f,
-                              rect_h = WINDOW_SIZE * 0.05f,
-                              padding = 15.f;
-
-        for (auto&& [idx, v] : values | std::views::enumerate) {
-            v.slider(Rectangle{
-                .x = (half_screen - rect_w / 2),
-                .y = half_screen - rect_h / 2 + (rect_h + padding) * idx,
-                .width = rect_w,
-                .height = rect_h,
+class Menu {
+   private:
+    struct Difficulty {
+       private:
+        constexpr static auto get_difficulties() noexcept {
+            return std::to_array<Difficulty>({
+                {"Easy", 10, 10, 10},
+                {"Medium", 16, 16, 40},
+                {"Hard", 30, 16, 99},
             });
         }
 
-        const auto& [sz, ratio] = std::tuple(values[0].get_value(), values[1].get_value());
-        selected_sz = static_cast<uint8_t>(sz);
-        selected_mines = static_cast<uint8_t>(sz * ratio);
+       public:
+        const char* str;
+        uint8_t w, h, mines;
+
+        Difficulty() = default;
+
+        constexpr Difficulty(const char* name, uint8_t w, uint8_t h, uint8_t mines)
+            : str(name), w(w), h(h), mines(mines) {}
+
+        static auto& draw_slider(Rectangle rect) {
+            constexpr static auto single_segment_range = 3.5f;
+            static const auto diffs = get_difficulties();
+            const auto slider_max = single_segment_range * diffs.size() - 1;
+
+            static float slider_value = 0.0f;
+            GuiSlider(rect, "Select difficulty", NULL, &slider_value, 0, slider_max);
+            auto&& diff = diffs[static_cast<size_t>(slider_value / single_segment_range)];
+
+            const auto& [x, y, w, h] = rect;
+            const auto font_size = h * 0.5f;
+            const auto [text_w, text_h] = MeasureTextEx(GetFontDefault(), diff.str, font_size, 1.f);
+            const auto text_pos = Vector2{x + (w - text_w) / 2, y + (h - text_h) / 2};
+            DrawTextEx(GetFontDefault(), diff.str, text_pos, font_size, 1.f, RAYWHITE);  // draw current difficulty on slider
+
+            return diff;
+        }
+    };
+
+   public:
+    inline auto show() {
+        constexpr static auto title = "Minesweeper";
+        constexpr static auto title_font_sz = 52;
+        static const auto title_sz = MeasureTextEx(GetFontDefault(), title, title_font_sz, 1.f);
+        DrawText(title, (WINDOW_SIZE - title_sz.x) / 2, WINDOW_SIZE * 0.15, title_font_sz, RAYWHITE);
+
+        constexpr static auto half_screen = WINDOW_SIZE / 2.f,
+                              rect_w = WINDOW_SIZE * 0.5f,
+                              rect_h = WINDOW_SIZE * 0.05f;
+
+        constexpr static auto slider_rect = Rectangle{(half_screen - rect_w / 2), half_screen - rect_h / 2, rect_w, rect_h};
+        diff = Difficulty::draw_slider(slider_rect);
 
         constexpr static auto bttn_w = WINDOW_SIZE * 0.4f, bttn_h = WINDOW_SIZE * 0.08f;
         constexpr static auto play_bttn_rect = Rectangle{(WINDOW_SIZE - bttn_w) / 2, WINDOW_SIZE - bttn_h * 2, bttn_w, bttn_h};
@@ -142,133 +183,161 @@ struct Menu {  // TODO
         return GuiButton(play_bttn_rect, "PLAY") ? Game_State::Game_Started : Game_State::Menu;
     }
 
-    inline auto win(auto&& timer) {}  //! TODO
+    inline auto win(auto&& timer) {}
 
-    inline auto lose() {}  //! TODO
+    inline auto lose() {}
 
-    uint8_t selected_sz, selected_mines;
-
-   private:
-    struct VALUE {
-        using Value_t = float;
-
-        Value_t value{};
-        const Value_t min, max;
-        const std::string txt;
-
-        constexpr VALUE(std::string_view txt, float min, float max)
-            : txt{txt}, min{min}, max{max} {}
-
-        void slider(Rectangle rect) {
-            GuiSlider(rect, txt.c_str(), NULL, &value, min, max);
-            const auto fmt = (value < 1.f ? std::format("{0:.2f}", value) : std::format("{0}x{0}", (int)value));
-            DrawText(fmt.c_str(), rect.x + 10, rect.y + 10, 20, RAYWHITE);
-        }
-
-        constexpr Value_t get_value() const { return value; }
-    };
+    Difficulty diff;
 };
 
 class MinesweeperGrid {
-    using Idx_Type = uint32_t;
+    using Num_Type = uint32_t;
 
    public:
-    MinesweeperGrid(Idx_Type num_cells, Idx_Type num_mines)
-        : sq_size{num_cells}, cell_size{static_cast<float>(WINDOW_SIZE) / sq_size} {
-        const auto total_sz = num_cells * num_cells;
-        static Random_t<Idx_Type> mines_rand;
+    MinesweeperGrid(Num_Type width, Num_Type height, Num_Type mines_num)
+        : width{width}, height{height}, cell_size{static_cast<float>(WINDOW_SIZE) / std::max(width, height)} {
+        const auto total_sz = width * height;
+        assert(mines_num <= total_sz && "Number of mines cannot exceed the total number of cells.");
+
+        static Random_t<Num_Type> mines_rand;
         cells.resize(total_sz);
 
-        while (mines.size() != num_mines)  // fill set of unique positions
+        while (mines.size() != mines_num) {  // fill set of unique positions
             mines.insert(mines_rand.get(0, total_sz - 1));
+        }
 
         for (auto&& unique : mines) {
             cells[unique].type = Cell_Type::Mine;
-
-            const auto [x, y] = pos_from_idx(unique);
-            for (int dy = -1; dy <= 1; ++dy) {  // count mines around
-                for (int dx = -1; dx <= 1; ++dx) {
-                    if (dx == 0 && dy == 0)  // mine itself
-                        continue;
-
-                    const auto abs_x = x + dx, abs_y = y + dy;
-                    if (abs_x < 0 || abs_x >= sq_size || abs_y < 0 || abs_y >= sq_size)
-                        continue;
-                    ++cells[abs_y * sq_size + abs_x].mines_around;
-                }
-            }
+            loop_over_neighbors(unique, [](Cell& cell) { ++cell.mines_around; });
         }
-        grid_time.start();
+        grid_timer.start();
     }
 
-    auto update_input(Mouse_Wrapper mouse) {  //! TODO: rewrite
-        const auto cell_idx = idx_from_mouse_pos(mouse.pos);
+    auto update_input(Mouse_Wrapper mouse) {
+        const auto idx = idx_from_pos(mouse.pos);
+        auto& selected_cell = cells[idx];
         switch (mouse.action) {
             case Mouse_Action::Reveal:
+                reveal_cell(idx);
                 break;
             case Mouse_Action::Toggle_Flag:
+                selected_cell.toggle_flag();
+                break;
+            case Mouse_Action::None:
                 break;
             default:
-                break;
+                std::unreachable();
         }
-        return cell_idx;
+        return idx;
     }
 
     auto update_status() {
-        if (std::ranges::any_of(cells, [](auto&& cell) { return cell.is_mine() && cell.is_revealed(); })) {  // if any mine is revealed
+        auto&& revealed = cells | std::views::filter([](auto&& cell) -> bool { return cell.is_revealed(); });
+        const auto revealed_sz = std::ranges::distance(revealed.begin(), revealed.end());
+
+        if (std::ranges::any_of(revealed, [](auto&& cell) { return cell.is_mine(); })) {  // if any mine is revealed
             return Grid_Status::Bad;
         }
-        if (std::ranges::all_of(cells, [](auto&& cell) { return !cell.is_mine() && cell.is_revealed(); })) {  // if all NOT mines are revealed
-            grid_time.stop();
+
+        auto&& flagged = [this](auto&& cell_idx) { return cells[cell_idx].is_flagged(); };
+        if (cells.size() - revealed_sz == mines.size() || std::ranges::all_of(mines, flagged)) {
+            grid_timer.stop();
             return Grid_Status::Finished;
         }
         return Grid_Status::Good;
     }
 
-    void
-    draw(Idx_Type cell_idx) {  // TODO: REFACTOR
+    auto draw(Num_Type cell_idx) {
+        constexpr static auto active_cell = std::tuple(PURPLE, 3.f), inactive_cell = std::tuple(LIGHTGRAY, 1.f);
+        constexpr static auto revealed_cell_color = DARKGRAY;
+
         for (auto&& [idx, cell] : cells | std::views::enumerate) {
             const auto [x, y] = pos_from_idx(idx);
             const auto rect = Rectangle(x * cell_size, y * cell_size, cell_size, cell_size);
-            const auto [color, thick] = (idx == cell_idx ? std::tuple(PURPLE, 3.f) : std::tuple(LIGHTGRAY, 1.f));  // highlight cell under mouse
-            DrawRectangleLinesEx(rect, thick, color);
 
             if (cell.is_revealed()) {
-            } else if (cell.is_flagged()) {
+                DrawRectangleRec(rect, revealed_cell_color);
+
+                switch (cell.type) {
+                    case Cell_Type::Mine:
+                        draw_texture(Texture_ID::Mine, rect);
+                        break;
+                    case Cell_Type::Normal:
+                        draw_mines_around(cell.mines_around, rect);
+                        break;
+                    default:
+                        std::unreachable();
+                }
+            } else {
+                const auto& [color, thick] = (idx == cell_idx ? active_cell : inactive_cell);
+                DrawRectangleLinesEx(rect, thick, color);
+
+                if (cell.is_flagged())
+                    draw_texture(Texture_ID::Flag, rect);
             }
-#ifdef _DEBUG
-            switch (cell.type) {
-                case Cell_Type::Mine:
-                    DrawText("M", rect.x + cell_size / 2 - 10, rect.y + cell_size / 2 - 10, 20, RED);
-                    break;
-                default:
-                    if (const auto& mines_around = cell.mines_around; mines_around > 0)
-                        DrawText(TextFormat("%d", mines_around), rect.x + cell_size / 2 - 10, rect.y + cell_size / 2 - 10, 20, GREEN);
-                    break;
-            }
-#endif
         }
     }
 
     inline auto get_time() const {
-        return grid_time.get_duration();
+        return grid_timer.get_duration();
     }
 
     ~MinesweeperGrid() noexcept = default;
 
    private:
-    inline std::array<Idx_Type, 2> pos_from_idx(Idx_Type idx) const noexcept {
-        return std::to_array({idx % sq_size, idx / sq_size});
+    inline std::array<Num_Type, 2> pos_from_idx(Num_Type idx) const noexcept {
+        return std::to_array({idx % width, idx / width});
     }
 
-    inline Idx_Type idx_from_mouse_pos(Vector2 pos) const noexcept {
-        return static_cast<Idx_Type>(pos.y / cell_size) * sq_size + static_cast<Idx_Type>(pos.x / cell_size);
+    inline Num_Type idx_from_pos(Vector2 pos) const noexcept {
+        const auto& [x, y] = pos;
+        const auto calc_idx = static_cast<Num_Type>(y / cell_size) * width + static_cast<Num_Type>(x / cell_size);
+        return std::clamp<Num_Type>(calc_idx, 0, cells.size() - 1);
     }
 
-    Idx_Type sq_size;
+    inline void loop_over_neighbors(Num_Type idx, auto&& Func) noexcept {
+        const auto [x, y] = pos_from_idx(idx);
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (dx == 0 && dy == 0)
+                    continue;
+
+                const auto abs_x = x + dx, abs_y = y + dy;
+                if (abs_x < 0 || abs_x >= width || abs_y < 0 || abs_y >= height)
+                    continue;
+                Func(cells[abs_y * width + abs_x]);
+            }
+        }
+    }
+
+    void reveal_cell(Num_Type idx) {
+        if (cells[idx].is_revealed())
+            return;
+
+        std::queue<Num_Type> to_reveal;
+        to_reveal.push(idx);
+
+        while (!to_reveal.empty()) {
+            auto current_idx = to_reveal.front();
+            to_reveal.pop();
+
+            auto& current_cell = cells[current_idx];
+            current_cell.reveal();
+
+            if (current_cell.mines_around == 0) {
+                loop_over_neighbors(current_idx, [&](Cell& cell) {
+                    auto neighbor_idx = &cell - &cells[0];
+                    if (!cell.is_mine() && !cell.is_revealed())
+                        to_reveal.push(neighbor_idx);
+                });
+            }
+        }
+    }
+
+    Num_Type width, height;
     float cell_size;
-    Timer<Measurements::s> grid_time;
-    std::set<Idx_Type> mines;
+    Timer<Measurements::s> grid_timer;
+    std::set<Num_Type> mines;
     std::vector<Cell> cells;
 };
 
@@ -277,38 +346,33 @@ int main() {
     InitWindow(WINDOW_SIZE, WINDOW_SIZE, "Raylib Minesweeper");
     // SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
 
-    static const auto texture_flag = get_texture(Texture_ID::Flag);
-    static const auto texture_mine = get_texture(Texture_ID::Mine);
-
     static Game_State game_state;  // = Game_State::Game_Started;
     static Menu menu;
     static Mouse_Wrapper mouse;
-    std::unique_ptr<MinesweeperGrid> grid = std::make_unique<MinesweeperGrid>(10, 10);
+    std::shared_ptr<MinesweeperGrid> grid;
 
+    constexpr static auto bg_color = Color(30, 30, 30, 255);
     while (!WindowShouldClose()) {
         mouse.update();
 
         BeginDrawing();
         {
-            ClearBackground(DARKGRAY);
-
-            DrawTexture(texture_flag, 10, 10, WHITE);
-            DrawTexture(texture_mine, 10, 10 + 28 + 10, WHITE);
+            ClearBackground(bg_color);
 
             switch (game_state) {  // TODO: REFACTOR
                 case Game_State::Menu: {
-                    menu.show();
+                    game_state = menu.show();
                     break;
                 }
                 case Game_State::Game_Started: {
                     if (!grid) {
-                        grid = std::make_unique<MinesweeperGrid>(menu.selected_sz, menu.selected_mines);
+                        const auto& [_, w, h, mines] = menu.diff;
+                        grid = std::make_shared<MinesweeperGrid>(w, h, mines);
                     }
 
                     const auto current_cell = grid->update_input(mouse);
-                    const auto grid_status = grid->update_status();
 
-                    switch (grid_status) {
+                    switch (grid->update_status()) {
                         case Grid_Status::Bad:
                             game_state = Game_State::Game_Lost;
                             break;
@@ -316,11 +380,11 @@ int main() {
                             game_state = Game_State::Game_Won;
                             break;
                         case Grid_Status::Good:
-                            grid->draw(current_cell);
                             break;
                         default:
                             std::unreachable();
                     }
+                    grid->draw(current_cell);
                     break;
                 }
                 case Game_State::Game_Won: {
@@ -333,12 +397,11 @@ int main() {
                     grid.reset();
                     break;
                 }
-                default: {
+                default:
                     std::unreachable();
-                }
             }
         }
-        // DrawFPS(10, 10);
+        DrawFPS(10, 10);
         EndDrawing();
     }
     CloseWindow();
