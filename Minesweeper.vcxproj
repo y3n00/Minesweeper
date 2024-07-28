@@ -157,7 +157,22 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\Cell.cpp" />
+    <ClCompile Include="src\Difficulty.cpp" />
+    <ClCompile Include="src\Grid.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="src\Menu.cpp" />
+    <ClCompile Include="src\Mouse.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\Cell.h" />
+    <ClInclude Include="include\Constants.h" />
+    <ClInclude Include="include\Difficulty.h" />
+    <ClInclude Include="include\Grid.h" />
+    <ClInclude Include="include\Menu.h" />
+    <ClInclude Include="include\Mouse.h" />
+    <ClInclude Include="include\random.hpp" />
+    <ClInclude Include="include\timer.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
