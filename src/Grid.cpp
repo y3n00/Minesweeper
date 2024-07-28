@@ -9,9 +9,14 @@
 
 #include "../include/random.hpp"
 
+#include "../textures/bytes.h"
+
 static inline auto get_texture(Texture_ID texture_id) {
-    static const auto flag = LoadTexture("textures/flag.png");
-    static const auto mine = LoadTexture("textures/mine.png");
+    static const auto mem_flag = LoadImageFromMemory(".png", flag_png.data(), flag_png.size());
+    static const auto mem_mine= LoadImageFromMemory(".png", mine_png.data(), mine_png.size());
+
+    static const auto flag = LoadTextureFromImage(mem_flag);
+    static const auto mine = LoadTextureFromImage(mem_mine);
 
     switch (texture_id) {
         case Texture_ID::Flag:
