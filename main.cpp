@@ -37,7 +37,7 @@ int main() {
                     game_state = menu.show();
                     break;
                 }
-                case Game_State::Game_Continued: {
+                case Game_State::Game_Continues: {
                     if (!grid) {
                         using namespace Constants::Grid;
                         const auto& [w, mines, _] = menu.get_difficulty();

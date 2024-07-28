@@ -16,7 +16,7 @@ Game_State Menu::show() {
 
     this->diff = Difficulty::draw_slider(slider_rect);
 
-    return GuiButton(bttn_rect, "PLAY") ? Game_State::Game_Continued : Game_State::Menu;
+    return GuiButton(bttn_rect, "PLAY") ? Game_State::Game_Continues : Game_State::Menu;
 }
 
 Game_State Menu::end_game(Game_State gs) const {

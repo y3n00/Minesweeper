@@ -31,7 +31,7 @@ enum class Mouse_Action : Enum_t {
 
 enum class Game_State : Enum_t {
     Menu,
-    Game_Continued,
+    Game_Continues,
     Game_Lost,
     Game_Won,
 };
