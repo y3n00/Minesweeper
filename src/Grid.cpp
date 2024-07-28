@@ -47,7 +47,7 @@ static auto draw_mines_around(uint32_t mines_count, Rectangle params) {
 }
 
 MinesweeperGrid::MinesweeperGrid(Num_Type size, Num_Type mines_num)
-    : sz{ size }, cell_size{ WINDOW_SIZE / (float)sz } {
+    : sz{size}, cell_size{WINDOW_SIZE / (float)sz} {
     const auto total_sz = sz * sz;
 
     static Random_t<Num_Type> mines_rand;

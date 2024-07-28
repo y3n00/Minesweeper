@@ -15,6 +15,7 @@ int main() {
 #ifndef _NDEBUG
     SetTraceLogLevel(LOG_ERROR);
 #endif
+
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(WINDOW_SIZE, WINDOW_SIZE, Constants::window_title);
     SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
@@ -36,7 +37,7 @@ int main() {
                     game_state = menu.show();
                     break;
                 }
-                case Game_State::Game_Started: {
+                case Game_State::Game_Continued: {
                     if (!grid) {
                         using namespace Constants::Grid;
                         const auto& [w, mines, _] = menu.get_difficulty();
@@ -55,17 +56,15 @@ int main() {
                         case Grid_Status::Finished:
                             game_state = Game_State::Game_Won;
                             break;
-                        default:
-                            std::unreachable();
                     }
                     break;
                 }
                 case Game_State::Game_Lost:
-                case Game_State::Game_Won:
+                case Game_State::Game_Won: {
                     game_state = menu.end_game(game_state);
                     grid.reset();
                     break;
-
+                }
                 default:
                     std::unreachable();
             }

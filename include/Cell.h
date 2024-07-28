@@ -5,9 +5,9 @@
 #include "Constants.h"
 
 struct Cell {
-    bool is_mine() const;
-    bool is_revealed() const;
-    bool is_flagged() const;
+    [[nodiscard]] bool is_mine() const;
+    [[nodiscard]] bool is_revealed() const;
+    [[nodiscard]] bool is_flagged() const;
     void reveal();
     void toggle_flag();
 

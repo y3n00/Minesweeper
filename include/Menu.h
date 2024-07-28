@@ -5,9 +5,9 @@
 
 class Menu {
    public:
-    Game_State show();
-    Game_State end_game(Game_State gs) const;
-    const Difficulty& get_difficulty() const noexcept;
+    [[nodiscard]] Game_State show();
+    [[nodiscard]] Game_State end_game(Game_State gs) const;
+    [[nodiscard]] const Difficulty& get_difficulty() const noexcept;
 
    private:
     const Difficulty* diff = nullptr;

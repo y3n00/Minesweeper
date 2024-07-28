@@ -11,14 +11,14 @@ class MinesweeperGrid {
 
    public:
     MinesweeperGrid(Num_Type width, Num_Type mines_num);
-    Num_Type update_input(Mouse_Wrapper mouse);
-    Grid_Status update_status();
+    [[nodiscard]] Num_Type update_input(Mouse_Wrapper mouse);
+    [[nodiscard]] Grid_Status update_status();
     void draw(Num_Type cell_idx);
     ~MinesweeperGrid() noexcept = default;
 
    private:
-    inline std::array<Num_Type, 2> pos_from_idx(Num_Type idx) const noexcept;
-    inline Num_Type idx_from_pos(Vector2 pos) const noexcept;
+    [[nodiscard]] inline std::array<Num_Type, 2> pos_from_idx(Num_Type idx) const noexcept;
+    [[nodiscard]] inline Num_Type idx_from_pos(Vector2 pos) const noexcept;
     inline void loop_over_neighbors(Num_Type idx, auto&& Func) noexcept;
     inline void reveal_cell(Num_Type idx);
 
