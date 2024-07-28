@@ -1,7 +1,5 @@
 #pragma once
 
-#include <raylib.h>
-
 #include <cstdint>
 
 #include "Constants.h"
@@ -16,5 +14,4 @@ struct Cell {
     bool flagged = false, revealed = false;
     uint8_t mines_around = 0;
     Cell_Type type = Cell_Type::Normal;
-    Texture2D texture;
 };

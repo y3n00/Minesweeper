@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <queue>
 #include <ranges>
 
 #include "../include/random.hpp"
@@ -36,7 +37,7 @@ static auto draw_texture(Texture_ID texture_id, Rectangle params) {
 static auto draw_mines_around(uint32_t mines_count, Rectangle params) {
     using namespace Constants::Mines_Colors;
     const auto& [x, y, sz, _] = params;
-    const auto font_sz = sz * 0.8f;
+    const auto font_sz = sz * 0.7f;
 
     const auto as_str = std::to_string(mines_count);
     const auto text_width = MeasureText(as_str.c_str(), font_sz);
@@ -45,9 +46,9 @@ static auto draw_mines_around(uint32_t mines_count, Rectangle params) {
     DrawText(as_str.c_str(), x + half_sz - half_text_width, y + half_sz - half_font_sz, font_sz, colors[mines_count]);
 }
 
-MinesweeperGrid::MinesweeperGrid(Num_Type width, Num_Type height, Num_Type mines_num)
-    : width{width}, height{height}, cell_size{static_cast<float>(WINDOW_SIZE) / std::max(width, height)} {
-    const auto total_sz = width * height;
+MinesweeperGrid::MinesweeperGrid(Num_Type size, Num_Type mines_num)
+    : sz{ size }, cell_size{ WINDOW_SIZE / (float)sz } {
+    const auto total_sz = sz * sz;
 
     static Random_t<Num_Type> mines_rand;
     cells.resize(total_sz);
@@ -59,7 +60,6 @@ MinesweeperGrid::MinesweeperGrid(Num_Type width, Num_Type height, Num_Type mines
         cells[unique].type = Cell_Type::Mine;
         loop_over_neighbors(unique, [](Cell& cell) { ++cell.mines_around; });
     }
-    grid_timer.start();
 }
 
 MinesweeperGrid::Num_Type MinesweeperGrid::update_input(Mouse_Wrapper mouse) {
@@ -87,11 +87,8 @@ Grid_Status MinesweeperGrid::update_status() {
 
     if (std::ranges::any_of(revealed, [](auto&& cell) { return cell.is_mine(); }))  // if any mine is revealed
         return Grid_Status::Bad;
-
-    if (cells.size() - revealed_sz == mines.size() || std::ranges::all_of(mines, flagged)) {
-        grid_timer.stop();
+    else if (cells.size() - revealed_sz == mines.size() || std::ranges::all_of(mines, flagged))
         return Grid_Status::Finished;
-    }
 
     return Grid_Status::Good;
 }
@@ -127,12 +124,14 @@ void MinesweeperGrid::draw(Num_Type cell_idx) {
 }
 
 inline std::array<MinesweeperGrid::Num_Type, 2> MinesweeperGrid::pos_from_idx(MinesweeperGrid::Num_Type idx) const noexcept {
-    return std::to_array({idx % width, idx / width});
+    return std::to_array({idx % sz, idx / sz});
 }
 
 inline MinesweeperGrid::Num_Type MinesweeperGrid::idx_from_pos(Vector2 pos) const noexcept {
+    using namespace Constants::Grid;
+
     const auto [x, y] = pos;
-    const auto calc_idx = static_cast<Num_Type>(y / cell_size) * width + static_cast<Num_Type>(x / cell_size);
+    const auto calc_idx = static_cast<Num_Type>(y / cell_size) * sz + static_cast<Num_Type>(x / cell_size);
     return std::clamp<Num_Type>(calc_idx, 0, cells.size() - 1);
 }
 
@@ -144,9 +143,9 @@ inline void MinesweeperGrid::loop_over_neighbors(Num_Type idx, auto&& Func) noex
                 continue;
 
             const auto abs_x = x + dx, abs_y = y + dy;
-            if (abs_x < 0 || abs_x >= width || abs_y < 0 || abs_y >= height)
+            if (abs_x < 0 || abs_x >= sz || abs_y < 0 || abs_y >= sz)
                 continue;
-            Func(cells[abs_y * width + abs_x]);
+            Func(cells[abs_y * sz + abs_x]);
         }
     }
 }

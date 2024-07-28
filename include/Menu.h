@@ -4,12 +4,11 @@
 #include "Difficulty.h"
 
 class Menu {
-   private:
-    const Difficulty* diff = nullptr;
-
    public:
     Game_State show();
-    void lose();
-    void win(const auto& timer) {}
-    const Difficulty& get_diff() const noexcept;
+    Game_State end_game(Game_State gs) const;
+    const Difficulty& get_difficulty() const noexcept;
+
+   private:
+    const Difficulty* diff = nullptr;
 };
