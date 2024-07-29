@@ -8,15 +8,11 @@
 #include <ranges>
 
 #include "../include/random.hpp"
-
-#include "../textures/bytes.h"
+#include "../textures/icons_bytes.h"
 
 static inline auto get_texture(Texture_ID texture_id) {
-    static const auto mem_flag = LoadImageFromMemory(".png", flag_png.data(), flag_png.size());
-    static const auto mem_mine= LoadImageFromMemory(".png", mine_png.data(), mine_png.size());
-
-    static const auto flag = LoadTextureFromImage(mem_flag);
-    static const auto mine = LoadTextureFromImage(mem_mine);
+    static const auto flag = LoadTextureFromImage(LoadImageFromMemory(".png", flag_png.data(), flag_png.size()));
+    static const auto mine = LoadTextureFromImage(LoadImageFromMemory(".png", mine_png.data(), mine_png.size()));
 
     switch (texture_id) {
         case Texture_ID::Flag:

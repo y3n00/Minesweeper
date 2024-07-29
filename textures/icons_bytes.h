@@ -1,7 +1,7 @@
 #include <array>
 #include <cstdint>
 
-constexpr std::array<uint8_t, 377> flag_png = {
+constexpr static auto flag_png = std::to_array<uint8_t>({
     0x89,
     0x50,
     0x4e,
@@ -379,9 +379,9 @@ constexpr std::array<uint8_t, 377> flag_png = {
     0x42,
     0x60,
     0x82,
-};
+});
 
-constexpr std::array<uint8_t, 443> mine_png = {
+constexpr static auto mine_png = std::to_array<uint8_t>({
     0x89,
     0x50,
     0x4e,
@@ -825,4 +825,4 @@ constexpr std::array<uint8_t, 443> mine_png = {
     0x42,
     0x60,
     0x82,
-};
+});
