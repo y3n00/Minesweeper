@@ -2,8 +2,11 @@
 
 #include <array>
 #include <concepts>
+#include <execution>
 #include <limits>
+#include <optional>
 #include <random>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -16,18 +19,33 @@
 #endif
 
 template <typename T>
-concept Numeric_Type = std::integral<T> || std::floating_point<T>;
+concept Numeric_Type = std::is_arithmetic_v<T>;
 
-template <Numeric_Type NT>
+#define MAX_LIMIT(T) T max_val = (std::numeric_limits<T>::max())
+#define MIN_LIMIT(T) T min_val = (std::numeric_limits<T>::min())
+
+#define PURE_AUTO decltype(auto)
+
 class Random_t {
-    using Type_Limit = std::numeric_limits<NT>;
+    template <std::integral I>
+    using int_dist = std::uniform_int_distribution<I>;
+
+    template <std::floating_point R>
+    using real_dist = std::uniform_real_distribution<R>;
 
    private:
-    constexpr static inline std::string_view m_all_symbols =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz"
-        "1234567890";
     IF_STATIC_VAR std::mt19937 gen{std::random_device{}()};
+
+    template <Numeric_Type Num_Type>
+    [[nodiscard]] IF_STATIC constexpr inline PURE_AUTO get_distribution(MIN_LIMIT(Num_Type), MAX_LIMIT(Num_Type)) noexcept {
+        if constexpr (std::is_floating_point_v<Num_Type>)
+            return real_dist<Num_Type>{min_val, max_val};
+
+        else if constexpr (sizeof(Num_Type) == 1)        // cant use 1 byte types on msvc
+            return int_dist<int16_t>{min_val, max_val};  // int16_t covers all numeric limits of 1 byte types
+        else
+            return int_dist<Num_Type>{min_val, max_val};
+    }
 
    public:
     Random_t() = default;
@@ -35,52 +53,66 @@ class Random_t {
     Random_t(const Random_t&) = delete;
     Random_t& operator=(const Random_t&) = delete;
 
-    [[nodiscard]] IF_STATIC NT get(NT min_val = Type_Limit::min(), NT max_val = Type_Limit::max()) {
-        if constexpr (std::is_floating_point_v<NT>) {
-            return std::uniform_real_distribution<NT>{min_val, max_val}(gen);
-        } else {
-            if constexpr (sizeof(NT) == 1) {
-                const auto temp_value = std::uniform_int_distribution<int16_t>{min_val, max_val}(gen);
-                return static_cast<NT>(temp_value);
-            } else {
-                return std::uniform_int_distribution<NT>{min_val, max_val}(gen);
-            }
-        }
+    template <Numeric_Type Num_Type>
+    [[nodiscard]] IF_STATIC inline PURE_AUTO from_range(MIN_LIMIT(Num_Type), MAX_LIMIT(Num_Type)) noexcept {
+        return static_cast<Num_Type>(get_distribution<Num_Type>(min_val, max_val)(gen));
     }
 
-    [[nodiscard]] IF_STATIC std::string generate_string(size_t str_len) {
-        constexpr static auto last_idx = static_cast<NT>(m_all_symbols.length() - 1);
+    template <Numeric_Type Num_Type>
+    [[nodiscard]] IF_STATIC inline PURE_AUTO from_zero_to(MAX_LIMIT(Num_Type)) noexcept {
+        return from_range<Num_Type>(Num_Type{}, max_val);
+    }
+
+    [[nodiscard]] IF_STATIC inline PURE_AUTO get_elem(std::ranges::random_access_range auto&& range) noexcept {
+        return range[from_zero_to<std::size_t>(std::ranges::size(range) - 1)];
+    }
+
+    template <std::ranges::range R, typename Num_t = std::ranges::range_value_t<R>>
+        requires Numeric_Type<Num_t>
+    [[noreturn]] IF_STATIC inline void fill_range(R& range, MIN_LIMIT(Num_t), MAX_LIMIT(Num_t)) noexcept {
+        std::ranges::for_each(range, [&](auto& elem) { elem = from_range<Num_t>(min_val, max_val); });
+    }
+
+    [[noreturn]] IF_STATIC inline void fill_range_from(std::ranges::range auto& range, std::ranges::random_access_range auto&& from) noexcept {
+        if (not std::ranges::empty(from))
+            std::ranges::for_each(range, [&](auto& elem) { elem = get_elem(from); });
+    }
+
+    [[noreturn]] IF_STATIC inline void shuffle_range(std::ranges::random_access_range auto& range) {
+        std::ranges::shuffle(range, gen);
+    }
+
+    [[nodiscard]] IF_STATIC inline PURE_AUTO get_string(size_t str_len, const std::string& extra_chars = "") noexcept {
+        constexpr std::string_view basic_symbols =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "abcdefghijklmnopqrstuvwxyz"
+            "1234567890";
         std::string result(str_len, ' ');
-        for (char& ch : result)
-            ch = m_all_symbols[get(0, last_idx)];
+        fill_range_from(result, extra_chars + basic_symbols.data());
         return result;
     }
 
-    [[nodiscard]] IF_STATIC std::string generate_string(size_t str_len, const std::string& extra_chars) {
-        const auto all_symbols = extra_chars + m_all_symbols.data();
-        const auto last_idx = static_cast<NT>(all_symbols.length() - 1);
-        std::string result(str_len, ' ');
-        for (char& ch : result)
-            ch = all_symbols[get(0, last_idx)];
-        return result;
-    }
-
-    template <std::ranges::range R>
-    [[nodiscard]] IF_STATIC void fill_range(R& range, NT min_val = Type_Limit::min(), NT max_val = Type_Limit::max()) {
-        for (auto& element : range)
-            element = get(min_val, max_val);
-    }
-
-    template <std::size_t SZ>
-    [[nodiscard]] IF_STATIC std::array<NT, SZ> filled_array(NT min = Type_Limit::min(), NT max = Type_Limit::max()) {
-        std::array<NT, SZ> arr;
-        fill_range(arr, min, max);
+    template <Numeric_Type Num_Type, size_t SZ>
+    [[nodiscard]] IF_STATIC inline PURE_AUTO get_array(MIN_LIMIT(Num_Type), MAX_LIMIT(Num_Type)) noexcept {
+        std::array<Num_Type, SZ> arr;
+        fill_range(arr, min_val, max_val);
         return arr;
     }
 
-    [[nodiscard]] IF_STATIC std::vector<NT> filled_vector(std::size_t size, NT min_val = Type_Limit::min(), NT max_val = Type_Limit::max()) {
-        std::vector<NT> vec(size);
+    template <Numeric_Type Num_Type>
+    [[nodiscard]] IF_STATIC inline PURE_AUTO get_vector(size_t size, MIN_LIMIT(Num_Type), MAX_LIMIT(Num_Type)) noexcept {
+        std::vector<Num_Type> vec(size);
         fill_range(vec, min_val, max_val);
         return vec;
     }
+
+    [[nodiscard]] IF_STATIC inline bool get_bool() noexcept {
+        return from_zero_to<int>(1) == 0;
+    }
 };
+
+#undef IF_STATIC
+#undef IF_STATIC_VAR
+#undef MAX_LIMIT
+#undef MIN_LIMIT
+#undef PURE_AUTO
