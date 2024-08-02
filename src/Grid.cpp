@@ -51,11 +51,11 @@ MinesweeperGrid::MinesweeperGrid(Num_Type size, Num_Type mines_num)
     : sz{size}, cell_size{WINDOW_SIZE / (float)sz} {
     const auto total_sz = sz * sz;
 
-    static Random_t<Num_Type> mines_rand;
+    static Random_t mines_rand;
     cells.resize(total_sz);
 
     while (mines.size() != mines_num)  // fill set of unique positions
-        mines.insert(mines_rand.get(0, total_sz - 1));
+        mines.insert(mines_rand.from_zero_to(total_sz - 1));
 
     for (auto&& unique : mines) {
         cells[unique].type = Cell_Type::Mine;
